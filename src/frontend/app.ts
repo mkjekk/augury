@@ -52,6 +52,8 @@ import {NgRedux} from '@angular-redux/store';
 import {IAppState} from './store/model';
 import {MainActions} from './actions/main-actions';
 
+import { NodeInspectService, NodeInspectActions } from 'feature-modules/node-inspect/frontend';
+
 require('!style!css!postcss!../styles/app.css');
 
 @Component({
@@ -76,16 +78,22 @@ export class App {
   @select(store => store.main.selectedComponentsSubTab) selectedComponentsSubTab;
   @select(store => store.main.DOMSelectionActive) domSelectionActive;
 
-  constructor(private ngRedux: NgRedux<IAppState>,
-              private mainActions: MainActions,
-              private changeDetector: ChangeDetectorRef,
-              private connection: Connection,
-              private directConnection: DirectConnection,
-              private options: Options,
-              private userActions: UserActions,
-              private viewState: ComponentViewState,
-              private zone: NgZone,
-              private errorHandler: ErrorHandler) {
+  constructor(
+    private ngRedux: NgRedux<IAppState>,
+    private mainActions: MainActions,
+    private changeDetector: ChangeDetectorRef,
+    private connection: Connection,
+    private directConnection: DirectConnection,
+    private options: Options,
+    private userActions: UserActions,
+    private viewState: ComponentViewState,
+    private zone: NgZone,
+    private errorHandler: ErrorHandler,
+    private s: NodeInspectActions,
+    private nodeInspectService: NodeInspectService
+  ) {
+
+    this.nodeInspectService.addExample()
 
     // this should be our special ErrorHandler subclass which we can listen to
     if (this.errorHandler instanceof UncaughtErrorHandler) {
@@ -270,6 +278,7 @@ export class App {
 
     const m = MessageFactory.selectComponent(node, node.isComponent);
 
+    console.log(m)
     const promise = this.directConnection.handleImmediate(m)
       .then(response => {
         if (!response) {

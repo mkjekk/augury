@@ -48,9 +48,12 @@ function grab_files_and_zip {
   mkdir $dir
   cp -R $files $dir/
 <<<<<<< HEAD
+<<<<<<< HEAD
   rm $dir/build/*.map
 =======
 >>>>>>> origin/dev
+=======
+>>>>>>> upstream/augury2-poc
 
   # zip up the crx dir
   cwd=$(pwd -P)

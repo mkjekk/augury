@@ -1,3 +1,5 @@
+import * as JSON5 from 'json5';
+
 import {
   ChangeDetectorRef,
   ChangeDetectionStrategy,
@@ -74,11 +76,13 @@ export class PropertyEditor {
   }
 
   private parseValue(value): EditorResult {
-    try {
-      return new Function(`return ${value}`)();
-    }
-    catch (e) {
-      return value;
+    if (value === 'undefined') { return undefined; }
+    else {
+      try {
+        return JSON5.parse(value);
+      } catch (e) {
+        return '' + value;
+      }
     }
   }
 
@@ -93,8 +97,24 @@ export class PropertyEditor {
     return this.value === undefined;
   }
 
+  private isFunction(): boolean {
+    return typeof this.value === 'function';
+  }
+
+  private isNumber(): boolean {
+    return typeof this.value === 'number';
+  }
+
   private isNull(): boolean {
     return this.value === null;
+  }
+
+  private isString(): boolean {
+    return typeof this.value === 'string';
+  }
+
+  private isBoolean(): boolean {
+    return typeof this.value === 'boolean';
   }
 
   private isEmptyString(): boolean {

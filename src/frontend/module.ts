@@ -64,7 +64,20 @@ import {
   Options,
 } from './state';
 
+import { buildConfig } from '../build.config';
 import {App} from './app';
+
+import { MessagePipeFrontend } from 'feature-modules/.lib';
+import {
+  NodeInspectService,
+  NodeInspectActions,
+  NODE_INSPECT_COMPONENTS } from 'feature-modules/node-inspect/frontend';
+import {
+  ChangeDetectionProfilerService,
+  ChangeDetectionProfilerActions,
+  CHANGE_DETECTION_PROFILER_COMPONENTS } from 'feature-modules/change-detection-profiler/frontend';
+
+import { AngularSplitModule } from 'angular-split';
 
 @NgModule({
   imports: [
@@ -72,6 +85,7 @@ import {App} from './app';
     CommonModule,
     FormsModule,
     NgReduxModule,
+    AngularSplitModule,
   ],
   declarations: [
     Accordion,
@@ -101,6 +115,8 @@ import {App} from './app';
     NgModuleInfo,
     NgModuleConfigView,
     AnalyticsPopup,
+    ...NODE_INSPECT_COMPONENTS,
+    ...CHANGE_DETECTION_PROFILER_COMPONENTS,
   ],
   providers: [
     Connection,
@@ -112,13 +128,19 @@ import {App} from './app';
     ComponentPropertyState,
     SendAnalytics,
     { provide: ErrorHandler, useClass: UncaughtErrorHandler },
+    MessagePipeFrontend,
+    NodeInspectActions,
+    NodeInspectService,
+    ChangeDetectionProfilerActions,
+    ChangeDetectionProfilerService,
   ],
   bootstrap: [App]
 })
 export class FrontendModule {
   constructor(
     ngRedux: NgRedux<IAppState>,
-    sendAnalytics: SendAnalytics) {
+    sendAnalytics: SendAnalytics,
+  ) {
     const store = createStore(
       rootReducer,
       compose(applyMiddleware(reduxLogger),
@@ -129,8 +151,7 @@ export class FrontendModule {
   }
 }
 
-declare const PRODUCTION: boolean;
-if (PRODUCTION) {
+if (buildConfig.prodMode) {
   enableProdMode();
 }
 

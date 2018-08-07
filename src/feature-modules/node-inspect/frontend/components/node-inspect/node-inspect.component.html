@@ -1,0 +1,19 @@
+<ng-container *ngIf="examples | async as exs">
+  <div>
+    <div>
+      <button type="button" (click)="inspect()"> inspect </button>
+      <button type="button" (click)="addExample()"> add example </button>
+    </div>
+    <div>
+      <div *ngIf="isArray(exs)">
+        <div *ngFor="let example of exs">
+          <span (click)="selectProp(example)"> {{example.prop}}: {{example.type}} </span>
+          <button *ngIf="example.type == 'Subject'" (click)="subscribeTo(example)"> subscribe </button>
+        </div>
+      </div>
+      <div *ngIf="!isArray(exs)">
+        {{exs}}
+      </div>
+    </div>
+  </div>
+</ng-container>

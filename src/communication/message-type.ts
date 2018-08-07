@@ -73,11 +73,41 @@ export enum MessageType {
   /// Emit a new value through an EventEmitter
   EmitValue,
 
+  GoogleTagManagerSend,
+
+  /// these have to be put here because there's no way to merge enums..
+  ///   (should be declared in 'diagnostic-tools' module directory)
+  /// Diagnostic info collected on the backend gets sent to the front end for display
+  DiagnosticPacket,
+  DiagnosticEvent,
+  /// Options related to Diagnostic updated on frontend, backend should read again
+  DiagnosticOptionsUpdated,
+
+  /** --- feature modules --- **/
+
+  /* highlighter */
+
   /// Set the nodes that should be highlighted on the page
   Highlight,
 
   /// Find a corresponding mutable tree node based on a DOM node
   FindElement,
 
-  GoogleTagManagerSend,
+  /* node-inspect */
+  NI_InspectNode, // frontend
+  NI_GetPropsAtPath, // frontend
+  NI_PropsAtPath, // backend
+  NI_ShallowProps, // backend
+  NI_SubscribeToObservable, // frontend
+  NI_SubscribedToObservable, // backend
+  NI_ObservableEmission, // backend // TODO: should be ObservableValue ???
+
+  /* change-detection-profiler */
+  CDP_Tick, // backend
+  CDP_MetricsPerSecond, // backend
+  CDP_Pause, // frontend
+  CDP_Unpause, // fronend
+  CDP_QueuedTask, // backend
+  CDP_DequeuedTask, // backend
+
 }

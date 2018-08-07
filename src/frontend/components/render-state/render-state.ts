@@ -1,3 +1,5 @@
+import * as JSON5 from 'json5';
+
 import {
   ChangeDetectionStrategy,
   Component,
@@ -61,7 +63,7 @@ export class RenderState {
   constructor(
     private userActions: UserActions,
     private propertyState: ComponentPropertyState
-  ) {}
+  ) { }
 
   keys(obj): string[] {
     return (obj instanceof Object) ? Object.keys(obj) : [];
@@ -73,7 +75,7 @@ export class RenderState {
     }
   }
 
-  private get none() {
+  get none() {
     return this.state == null || Object.keys(this.state).length === 0;
   }
 
@@ -118,12 +120,23 @@ export class RenderState {
   }
 
   private evaluate(data: string) {
-    try {
-      return (new Function(`return ${data}`))();
+    if (data === 'undefined') { return undefined; }
+    else {
+      try {
+        return JSON5.parse(data);
+      } catch (e) {
+        return '' + data;
+      }
     }
-    catch (e) {
-      return data;
-    }
+  }
+
+  private isFunction(key: string) {
+    return typeof this.state[key] === 'function'
+  }
+
+  private functionName(key: string) {
+    if (!this.isFunction(key)) return '';
+    return this.state[key].name
   }
 
   private getComponentMetadata(key: string): [ObjectType, any] {

@@ -1,4 +1,5 @@
 <div class="flex flex-column flex-auto overflow-auto">
+  <bt-node-inspect></bt-node-inspect>
   <div class="bg-darken-1 bg-panel border-bottom py3 px3 m0">
     <h4 class="primary-color col pt1 pb2 m0">
       {{ node && node.name || 'No component selected' }}
@@ -49,7 +50,7 @@
       </div>
     </accordion>
 
-    <accordion sectionTitle="State" *ngIf="hasState" [defaultExpanded]="hasState">
+    <accordion sectionTitle="State" [defaultExpanded]="true">
       <div section-content>
         <div [ngSwitch]="loadingState">
           <ng-template [ngSwitchCase]="ComponentLoadState.Received">
@@ -64,7 +65,10 @@
             </bt-render-state>
           </ng-template>
           <ng-template [ngSwitchCase]="ComponentLoadState.Failed">
-            Failed to load component state
+            <span class="primary-color"> Failed to load component state </span>
+          </ng-template>
+          <ng-template class="primary-color" [ngSwitchCase]="ComponentLoadState.Loading">
+            <span class="primary-color"> Loading component state... </span>
           </ng-template>
         </div>
       </div>
@@ -79,5 +83,9 @@
         </bt-dependency-info>
       </div>
     </accordion>
+
+    <bt-component-cd-box
+      [selected-node]="node">
+    </bt-component-cd-box>
   </div>
 </div>

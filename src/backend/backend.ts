@@ -1,6 +1,8 @@
 import {Subscription} from 'rxjs/Subscription';
 import {Subject} from 'rxjs/Subject';
 import 'rxjs/add/operator/debounceTime';
+import 'rxjs/add/operator/toPromise';
+import 'rxjs/add/operator/distinctUntilChanged';
 import {compare} from '../utils/patch';
 import {isAngular, isDebugMode} from './utils/app-check';
 
@@ -58,6 +60,11 @@ import {serialize} from '../utils';
 import {MessageQueue} from '../structures';
 import {SimpleOptions} from '../options';
 
+import { MessagePipeBackend } from 'feature-modules/.lib';
+import { highlighter } from 'feature-modules/highlighter/backend';
+import { nodeInspect } from 'feature-modules/node-inspect/backend';
+import { changeDetectionProfiler } from 'feature-modules/change-detection-profiler/backend';
+
 declare const ng;
 declare const getAllAngularRootElements: () => Element[];
 declare const treeRenderOptions: SimpleOptions;
@@ -82,7 +89,8 @@ let previousTree: MutableTree,
   previousRoutes: Array<Route>,
   previousCount: number,
   onMouseOver,
-  onMouseDown;
+  onMouseDown,
+  lastTreeMessage;
 
 const parsedModulesData: NgModulesRegistry = {
   modules: {},
@@ -90,6 +98,33 @@ const parsedModulesData: NgModulesRegistry = {
   configs: {},
   tokenIdMap: {},
 };
+
+const featureModulesPipe = new MessagePipeBackend({
+  messageQueue: messageBuffer,
+  sendMessage: send,
+  createQueueAlertMessage: () => MessageFactory.push()
+});
+
+const onUpdateNotifier = new Subject<void>(); // TODO: highlighter only needs tree notifier. this shouldnt exist.
+const nodeTree = new Subject<MutableTree>();
+const applicationRef = ng.probe(getAllAngularRootElements()[0]).injector.get(ng.coreTokens.ApplicationRef);
+
+// --- provision feature modules ---
+
+highlighter.useComponentTreeInstance(previousTree);
+highlighter.useDocumentInstance(document);
+highlighter.useOnUpdateNotifier(onUpdateNotifier.asObservable());
+highlighter.useMessagePipe(featureModulesPipe);
+
+nodeInspect.useComponentTreeInstance(previousTree);
+nodeInspect.useMessagePipe(featureModulesPipe);
+nodeInspect.useComponentTreeInstance(previousTree);
+
+changeDetectionProfiler.useNodeTree(nodeTree.asObservable());
+changeDetectionProfiler.useApplicationRef(applicationRef); // TODO: order matters here, which should be fixed. there should be ready()? -> initialize()
+changeDetectionProfiler.useMessagePipe(featureModulesPipe);
+
+// --- end ---
 
 const runAndHandleUncaughtExceptions = (fn: () => any) => {
   try {
@@ -118,69 +153,95 @@ const sendNgModulesMessage = () => {
   send(MessageFactory.push());
 };
 
-const parseInitialModules = () => {
-  runAndHandleUncaughtExceptions(() => {
-    const roots = getAllAngularRootElements().map(r => ng.probe(r));
-    if (roots.length) {
-      parseModulesFromRootElement(roots[0], parsedModulesData);
-      sendNgModulesMessage();
-    }
+const parseInitialModules = (): Promise<void> => {
+  return Promise.resolve().then(() => {
+    runAndHandleUncaughtExceptions(() => {
+      const roots = getAllAngularRootElements().map(r => ng.probe(r));
+      if (roots.length) {
+        parseModulesFromRootElement(roots[0], parsedModulesData);
+        sendNgModulesMessage();
+      }
+    });
   });
 };
 
-const updateComponentTree = (roots: Array<any>) => {
-  const {tree, count} = createTreeFromElements(roots, treeRenderOptions);
+const updateComponentTree = (roots: Array<any>): Promise<void> => {
+  return Promise.resolve().then(() => {
 
-  if (previousTree == null || Math.abs(previousCount - count) > deltaThreshold) {
-    messageBuffer.enqueue(MessageFactory.completeTree(tree));
-  }
-  else {
-    const changes = previousTree.diff(tree);
-    if (changes.length > 0) {
-      messageBuffer.enqueue(MessageFactory.treeDiff(changes));
+    const {tree, count} = createTreeFromElements(roots, treeRenderOptions, {
+      forEachNode: changeDetectionProfiler.watchNode
+    });
+
+    (<any> window).x = true
+    if ((<any> window).x) {
+      if (previousTree == null || Math.abs(previousCount - count) > deltaThreshold) {
+        messageBuffer.enqueue(MessageFactory.completeTree(tree));
+      }
+      else {
+        const changes = previousTree.diff(tree);
+        if (changes.length > 0) {
+          lastTreeMessage = 'diff';
+          messageBuffer.enqueue(MessageFactory.treeDiff(changes));
+        }
+        else {
+          if (lastTreeMessage === 'no-diff') { return; }
+          lastTreeMessage = 'no-diff';
+          messageBuffer.enqueue(MessageFactory.treeUnchanged());
+        }
+      }
+
+      /// Send a message through the normal channels to indicate to the frontend
+      /// that messages are waiting for it in {@link messageBuffer}
+      send(MessageFactory.push());
     }
-    else {
-      messageBuffer.enqueue(MessageFactory.treeUnchanged());
-    }
-  }
 
-  /// Send a message through the normal channels to indicate to the frontend
-  /// that messages are waiting for it in {@link messageBuffer}
-  send(MessageFactory.push());
+    // TODO: have a service that keeps updated tree for feature modules
+    highlighter.useComponentTreeInstance(tree);
+    nodeInspect.useComponentTreeInstance(tree);
+    changeDetectionProfiler.useComponentTreeInstance(tree);
 
-  previousTree = tree;
+    previousTree = tree;
 
-  previousCount = count;
-};
+    previousCount = count;
 
-const updateLazyLoadedNgModules = (routers) => {
-
-  routers.forEach(router => {
-    parseModulesFromRouter(router, parsedModulesData);
   });
-
-  sendNgModulesMessage();
 };
 
-const updateRouterTree = () => {
-  const routers: Array<any> = routerTree();
-  const parsedRoutes = routers.map(parseRoutes);
+const updateLazyLoadedNgModules = (routers): Promise<void> => {
+  return Promise.resolve().then(() => {
 
-  let routesChanged = !previousRoutes ? true : false;
+    routers.forEach(router => {
+      parseModulesFromRouter(router, parsedModulesData);
+    });
 
-  if (previousRoutes) {
-    const changes = compare(previousRoutes, parsedRoutes);
-    if (changes.length > 0) {
-      routesChanged = true;
+    sendNgModulesMessage();
+
+  });
+};
+
+const updateRouterTree = (): Promise<void> => {
+  return Promise.resolve().then(() => {
+
+    const routers: Array<any> = routerTree();
+    const parsedRoutes = routers.map(parseRoutes);
+
+    let routesChanged = !previousRoutes ? true : false;
+
+    if (previousRoutes) {
+      const changes = compare(previousRoutes, parsedRoutes);
+      if (changes.length > 0) {
+        routesChanged = true;
+      }
     }
-  }
 
-  previousRoutes = parsedRoutes;
+    previousRoutes = parsedRoutes;
 
-  if (routesChanged) {
-    updateLazyLoadedNgModules(routers);
-    messageBuffer.enqueue(MessageFactory.routerTree(parsedRoutes));
-  }
+    if (routesChanged) {
+      updateLazyLoadedNgModules(routers);
+      messageBuffer.enqueue(MessageFactory.routerTree(parsedRoutes));
+    }
+
+  });
 };
 
 const subject = new Subject<void>();
@@ -196,8 +257,13 @@ const bind = (root) => {
   // parse components and routes each time
   subscriptions.push(
     subject.debounceTime(0).subscribe(() => {
-      updateComponentTree(getAllAngularRootElements().map(r => ng.probe(r)));
-      updateRouterTree();
+      Promise.all([
+        updateComponentTree(getAllAngularRootElements().map(r => ng.probe(r))),
+        updateRouterTree()
+      ]).then(() => {
+        onUpdateNotifier.next()
+        nodeTree.next(previousTree) // TODO: this is confusing, since "previousTree" is the updated tree
+      });
     }));
 
   // initial load
@@ -218,10 +284,10 @@ const resubscribe = () => {
 
     getAllAngularRootElements().forEach(root => bind(ng.probe(root)));
 
-    setTimeout(() => runAndHandleUncaughtExceptions(() => parseInitialModules()));
+    setTimeout(() => runAndHandleUncaughtExceptions(() => parseInitialModules().then(() => onUpdateNotifier.next())));
 
     previousRoutes = null;
-    setTimeout(() => runAndHandleUncaughtExceptions(() => updateRouterTree()));
+    setTimeout(() => runAndHandleUncaughtExceptions(() => updateRouterTree().then(() => onUpdateNotifier.next())));
   });
 };
 
@@ -239,6 +305,9 @@ Object.defineProperty(window, selectedComponentPropertyKey,
   {value: noSelectedComponentWarningText});
 
 const messageHandler = (message: Message<any>) => {
+
+  featureModulesPipe.handleIncomingMessage(message);
+
   return runAndHandleUncaughtExceptions(() => {
     switch (message.messageType) {
       case MessageType.Initialize:
@@ -294,18 +363,6 @@ const messageHandler = (message: Message<any>) => {
           message.content.path,
           message.content.value);
 
-      case MessageType.Highlight:
-        if (previousTree == null) {
-          return;
-        }
-        highlight(message.content.nodes.map(id => previousTree.lookup(id)));
-
-      case MessageType.FindElement:
-        if (previousTree == null) {
-          return;
-        }
-
-        findElement(message);
     }
     return undefined;
   });
